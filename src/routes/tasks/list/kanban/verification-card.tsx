@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { Card, Avatar, Typography, Button, Space, Divider, Tag } from 'antd';
 import { UserOutlined, CheckOutlined, CloseOutlined, FileImageOutlined } from '@ant-design/icons';
 import { toast } from 'react-toastify';
 import { supabase } from '@/providers/supabaseClient';
+
+// Import the UserInfo type from the parent component
+import type { UserInfo } from '../index';
 
 // Define Verification interface here since it's not exported from index
 interface Verification {
@@ -13,11 +16,7 @@ interface Verification {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   created_at: string;
   updated_at: string;
-  user?: {
-    email?: string;
-    name?: string;
-    avatar_url?: string;
-  };
+  user?: UserInfo | null;
 }
 
 const { Text, Title } = Typography;
@@ -31,54 +30,85 @@ export const VerificationCard: React.FC<VerificationCardProps> = ({
   verification,
   onStatusChange 
 }) => {
+  console.log('🔄 Rendering VerificationCard for verification:', verification.id);
+  
   const handleStatusUpdate = async (newStatus: 'APPROVED' | 'REJECTED') => {
+    console.log(`🔄 Updating verification ${verification.id} status to ${newStatus}`);
+    
     try {
       if (onStatusChange) {
+        console.log('Using parent component status update handler');
         await onStatusChange(newStatus);
       } else {
-        const { error } = await supabase
+        console.log('Using direct Supabase update');
+        const { data, error } = await supabase
           .from('verification')
           .update({ 
             status: newStatus, 
             updated_at: new Date().toISOString() 
           })
-          .eq('id', verification.id);
+          .eq('id', verification.id)
+          .select()
+          .single();
         
-        if (error) throw error;
+        console.log('Update response:', { data, error });
+        
+        if (error) {
+          console.error('❌ Supabase update error:', error);
+          throw error;
+        }
+        
+        console.log('✅ Verification status updated successfully');
       }
       
       // Show success message
-      toast.success(`Verification ${newStatus.toLowerCase()} successfully`);
+      toast.success(`✅ Verification ${newStatus.toLowerCase()} successfully`);
     } catch (error) {
-      console.error('Error updating verification status:', error);
-      toast.error('Failed to update verification status');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Error updating verification status:', error);
+      toast.error(`Failed to update verification status: ${errorMessage}`);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getStatusColor = (status: string): 'success' | 'error' | 'processing' | 'warning' | 'default' => {
+    console.log(`Getting color for status: ${status}`);
+    const statusUpper = status ? status.toUpperCase() : 'UNKNOWN';
+    
+    switch (statusUpper) {
       case 'APPROVED':
         return 'success';
       case 'REJECTED':
         return 'error';
-      default:
+      case 'PENDING':
         return 'processing';
+      default:
+        console.warn(`⚠️ Unknown status: ${status}`);
+        return 'warning';
     }
+  };
+
+  const renderCardTitle = (): ReactNode => {
+    // Ensure we have a valid user_id before trying to substring it
+    const userIdDisplay = verification.user_id && verification.user_id.length >= 8 
+      ? verification.user_id.substring(0, 8) 
+      : 'user';
+      
+    return (
+      <Space>
+        <Avatar 
+          src={verification.user?.avatar_url} 
+          icon={!verification.user?.avatar_url ? <UserOutlined /> : undefined} 
+        />
+        <Text strong>{verification.user?.name || `User ${userIdDisplay}`}</Text>
+      </Space>
+    );
   };
 
   return (
     <Card 
       size="small"
       style={{ marginBottom: 16 }}
-      title={
-        <Space>
-          <Avatar 
-            src={verification.user?.avatar_url} 
-            icon={!verification.user?.avatar_url && <UserOutlined />} 
-          />
-          <Text strong>{verification.user?.name || `User ${verification.user_id.substring(0, 8)}`}</Text>
-        </Space>
-      }
+      title={renderCardTitle()}
       extra={
         <Tag color={getStatusColor(verification.status)}>
           {verification.status}
@@ -86,7 +116,16 @@ export const VerificationCard: React.FC<VerificationCardProps> = ({
       }
     >
       <div style={{ marginBottom: 12 }}>
-        <Text type="secondary">Submitted: {new Date(verification.created_at).toLocaleString()}</Text>
+        <Text type="secondary">
+          Submitted: {verification.created_at ? new Date(verification.created_at).toLocaleString() : 'N/A'}
+        </Text>
+        {verification.updated_at && verification.updated_at !== verification.created_at && (
+          <div>
+            <Text type="secondary" style={{ fontSize: '0.8em' }}>
+              Last updated: {new Date(verification.updated_at).toLocaleString()}
+            </Text>
+          </div>
+        )}
       </div>
       
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -160,11 +199,38 @@ export const VerificationCard: React.FC<VerificationCardProps> = ({
 
 export const VerificationCardSkeleton: React.FC = () => {
   return (
-    <Card size="small" style={{ marginBottom: 16 }} loading>
-      <Card.Meta 
+    <Card size="small" style={{ marginBottom: 16, width: '100%' }} loading>
+      <Card.Meta
         avatar={<Avatar icon={<UserOutlined />} />}
-        title="Loading..."
-        description="Loading verification details..."
+        title={
+          <div style={{ 
+            width: '100px', 
+            height: '16px', 
+            backgroundColor: '#f0f0f0', 
+            borderRadius: '2px' 
+          }} />
+        }
+        description={
+          <div style={{ 
+            marginTop: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px'
+          }}>
+            <div style={{ 
+              width: '80%', 
+              height: '14px', 
+              backgroundColor: '#f5f5f5', 
+              borderRadius: '2px' 
+            }} />
+            <div style={{ 
+              width: '60%', 
+              height: '14px', 
+              backgroundColor: '#f5f5f5', 
+              borderRadius: '2px' 
+            }} />
+          </div>
+        }
       />
     </Card>
   );

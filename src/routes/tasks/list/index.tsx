@@ -10,22 +10,13 @@ import { VerificationCard, VerificationCardSkeleton } from './kanban/verificatio
 import { supabase } from '@/providers/supabaseClient';
 
 // Types for verification data
-interface Verification {
-  id: number;
-  user_id: string;
-  national_id_image_url: string | null;
-  license_image_url: string | null;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  created_at: string;
-  updated_at: string;
-  user?: {
-    email?: string;
-    name?: string;
-    avatar_url?: string;
-  };
+export interface UserInfo {
+  id: string;
+  email?: string;
+  name?: string;
+  avatar_url?: string;
 }
 
-// Define verification data types
 interface Verification {
   id: number;
   user_id: string;
@@ -34,11 +25,7 @@ interface Verification {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   created_at: string;
   updated_at: string;
-  user?: {
-    email?: string;
-    name?: string;
-    avatar_url?: string;
-  };
+  user?: UserInfo | null; // Make user optional and allow null
 }
 
 // Define verification stages
@@ -58,26 +45,72 @@ export const TasksListPage = ({ children }: React.PropsWithChildren) => {
   // Fetch verification requests from Supabase
   const fetchVerifications = useCallback(async () => {
     try {
-      console.log('Fetching verification requests...');
+      console.log('🔍 Fetching verification requests...');
       setIsLoading(true);
-      const { data, error } = await supabase
+      
+      // Log the Supabase client configuration
+      console.log('🔧 Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      
+      // First, fetch the verification data
+      console.log('📡 Fetching verification data...');
+      const { data: verificationsData, error: verificationError } = await supabase
         .from('verification')
-        .select(`
-          *,
-          user:user_id (id, email, name, avatar_url)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      console.log('📡 Verification data response:', { 
+        count: verificationsData?.length || 0, 
+        error: verificationError 
+      });
+
+      if (verificationError) {
+        console.error('❌ Error fetching verification data:', verificationError);
+        throw verificationError;
       }
       
-      console.log('Fetched verifications:', data);
-      setVerifications(data || []);
+      if (!verificationsData || verificationsData.length === 0) {
+        console.warn('⚠️ No verification records found in the database');
+        setVerifications([]);
+        return;
+      }
+      
+      console.log(`✅ Fetched ${verificationsData.length} verification records`);
+      
+      // Extract unique user IDs from the verification data
+      const userIds = [...new Set(verificationsData.map(v => v.user_id))];
+      console.log('👥 Found user IDs:', userIds);
+      
+      // Fetch user data for these IDs
+      let usersMap = new Map();
+      if (userIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, email, name, avatar_url')
+          .in('id', userIds);
+          
+        if (usersError) {
+          console.warn('⚠️ Could not fetch user data:', usersError);
+        } else if (usersData && usersData.length > 0) {
+          // Create a map of user ID to user data for easy lookup
+          usersMap = new Map(usersData.map(user => [user.id, user]));
+          console.log(`✅ Fetched data for ${usersData.length} users`);
+        }
+      }
+      
+      // Combine verification data with user data
+      const enrichedVerifications = verificationsData.map(verification => ({
+        ...verification,
+        user: usersMap.get(verification.user_id) || null
+      }));
+      
+      console.log('📝 Sample enriched verification record:', 
+        JSON.stringify(enrichedVerifications[0], null, 2));
+      
+      setVerifications(enrichedVerifications);
     } catch (error) {
-      console.error('Error fetching verification requests:', error);
-      toast.error('Failed to load verification requests');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('❌ Error fetching verification requests:', error);
+      toast.error(`Failed to load verification requests: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -87,16 +120,33 @@ export const TasksListPage = ({ children }: React.PropsWithChildren) => {
     fetchVerifications();
   }, [fetchVerifications]);
 
-  // Group verifications by status
+  // Group verifications by status with additional logging
   const groupedVerifications = useMemo(() => {
-    return verifications.reduce((acc, verification) => {
-      const status = verification.status;
+    console.log('📊 Grouping verifications by status...');
+    const groups = verifications.reduce((acc, verification) => {
+      if (!verification || !verification.status) {
+        console.warn('⚠️ Verification record missing status:', verification);
+        return acc;
+      }
+      
+      // Normalize status to uppercase to handle case sensitivity
+      const status = verification.status.toUpperCase();
+      
       if (!acc[status]) {
+        console.log(`🆕 New status group: ${status}`);
         acc[status] = [];
       }
+      
       acc[status].push(verification);
       return acc;
     }, {} as Record<string, Verification[]>);
+    
+    console.log('📋 Verification groups:', Object.keys(groups));
+    Object.entries(groups).forEach(([status, items]) => {
+      console.log(`  - ${status}: ${items.length} items`);
+    });
+    
+    return groups;
   }, [verifications]);
 
   const handleStatusChange = async (id: number, newStatus: 'PENDING' | 'APPROVED' | 'REJECTED') => {
@@ -147,7 +197,10 @@ export const TasksListPage = ({ children }: React.PropsWithChildren) => {
     };
   }, [fetchVerifications]);
 
-  if (isLoading) return <PageSkeleton />;
+  if (isLoading) {
+    console.log('🔄 Loading verification data...');
+    return <PageSkeleton />;
+  }
 
   const handleDragEnd = () => {
     // Handle drag end logic here if needed
