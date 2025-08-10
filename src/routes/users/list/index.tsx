@@ -65,6 +65,59 @@ const VerificationStatus: React.FC<{ verified: boolean }> = ({ verified }) => (
 export const UsersListPage = ({ children }: React.PropsWithChildren) => {
   const go = useGo();
   const [updatingUsers, setUpdatingUsers] = useState<Record<string, boolean>>({});
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
+
+  // Fetch users from Supabase
+  const fetchUsers = async (currentPage: number, pageSize: number) => {
+    setLoading(true);
+    try {
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      // First get the total count
+      const { count } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+      
+      // Then get the paginated data
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      setUsers(data || []);
+      setPagination(prev => ({
+        ...prev,
+        total: count || 0,
+        current: currentPage,
+        pageSize: pageSize,
+      }));
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      message.error('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle table change (pagination, filters, sorter)
+  const handleTableChange = (pagination: any) => {
+    fetchUsers(pagination.current, pagination.pageSize);
+  };
+
+  // Initial data fetch
+  React.useEffect(() => {
+    fetchUsers(1, pagination.pageSize);
+  }, []);
 
   // Handle verification status change
   const handleVerificationChange = async (userId: string, newStatus: boolean): Promise<boolean> => {
@@ -74,10 +127,17 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
     try {
       const { error } = await supabase
         .from('users')
-        .update({ isVerified: newStatus })
+        .update({ is_verified: newStatus })
         .eq('id', userId);
 
       if (error) throw error;
+      
+      // Update local state to reflect the change
+      setUsers(prevUsers =>
+        prevUsers.map(user =>
+          user.id === userId ? { ...user, isVerified: newStatus } : user
+        )
+      );
       
       message.success(`User ${newStatus ? 'verified' : 'unverified'} successfully`);
       return true;
@@ -177,13 +237,16 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
       <Table
         rowKey="id"
         columns={columns}
+        dataSource={users}
+        loading={loading}
         pagination={{
+          ...pagination,
           showSizeChanger: true,
           showTotal: (total) => `Total ${total} users`,
+          pageSizeOptions: ['10', '20', '50', '100'],
         }}
-        // Add your data source here or use useTable hook
-        // dataSource={users}
-        // loading={loading}
+        onChange={handleTableChange}
+        scroll={{ x: 'max-content' }}
       />
     </List>
   );

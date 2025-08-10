@@ -4,6 +4,7 @@ import {
   DashboardOutlined,
   ProjectOutlined,
   ShopOutlined,
+  TeamOutlined,
 } from "@ant-design/icons";
 
 export const resources: IResourceItem[] = [
@@ -32,8 +33,16 @@ export const resources: IResourceItem[] = [
     create: "/tasks/new",
     edit: "/tasks/edit/:id",
     meta: {
-      label: "requests",
+      label: "Requests",
       icon: <ProjectOutlined />,
+    },
+  },
+  {
+    name: "users",
+    list: "/users",
+    meta: {
+      label: "Users",
+      icon: <TeamOutlined />,
     },
   },
 ];
