@@ -48,10 +48,10 @@ export const UserEditPage: React.FC = () => {
         name: values.name,
         phone: values.phone,
         role: values.role,
-        is_verified: values.isVerified,
-        is_company: values.isCompany,
-        is_owner: values.isOwner,
-        is_renter: values.isRenter,
+        isVerified: values.isVerified,
+        isCompany: values.isCompany,
+        isOwner: values.isOwner,
+        isRenter: values.isRenter,
       };
       
       await updateUser(id, updateData);

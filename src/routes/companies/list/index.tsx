@@ -10,7 +10,7 @@ import { supabase } from "@/providers/supabaseClient";
 
 // Type for verification status update
 interface VerificationUpdate {
-  is_verified: boolean;
+  isVerified: boolean;
 }
 
 import { CustomAvatar, PaginationTotal, Text } from "@/components";

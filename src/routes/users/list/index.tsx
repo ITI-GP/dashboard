@@ -125,7 +125,7 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
     try {
       const { error } = await supabase
         .from('users')
-        .update({ is_verified: newStatus })
+        .update({ isVerified: newStatus })
         .eq('id', userId);
 
       if (error) throw error;
