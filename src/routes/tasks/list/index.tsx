@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigation } from '@refinedev/core';
+import { message } from 'antd';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -149,23 +150,48 @@ export const TasksListPage = ({ children }: React.PropsWithChildren) => {
     return groups;
   }, [verifications]);
 
-  const handleStatusChange = async (id: number, newStatus: 'PENDING' | 'APPROVED' | 'REJECTED') => {
+  const handleStatusChange = async (verification: { id: number; user_id: string; status: string }, newStatus: 'PENDING' | 'APPROVED' | 'REJECTED'): Promise<void> => {
+    const loadingKey = 'verification-update';
+    message.loading({ content: 'Updating verification status...', key: loadingKey });
+    
     try {
-      const { error } = await supabase
+      // Update only the verification status
+      const { error: verificationError } = await supabase
         .from('verification')
-        .update({ 
-          status: newStatus, 
-          updated_at: new Date().toISOString() 
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString()
         })
-        .eq('id', id);
+        .eq('id', verification.id);
+
+      if (verificationError) throw verificationError;
+
+      // Show success message with status
+      message.success({
+        content: `Verification ${newStatus.toLowerCase()} successfully`,
+        key: loadingKey,
+        duration: 3
+      });
+
+      // Refresh data
+      await fetchVerifications();
       
-      if (error) throw error;
-      
-      toast.success(`Verification ${newStatus.toLowerCase()} successfully`);
-      fetchVerifications();
+      // No return value needed
     } catch (error) {
-      console.error('Error updating verification status:', error);
-      toast.error('Failed to update verification status');
+      console.error('Verification update error:', error);
+      
+      // Show specific error message based on error type
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to update verification status. Please try again.';
+      
+      message.error({
+        content: errorMessage,
+        key: loadingKey,
+        duration: 5
+      });
+      
+      throw error;
     }
   };
 
@@ -232,10 +258,9 @@ export const TasksListPage = ({ children }: React.PropsWithChildren) => {
                       data={verification}
                     >
                       <VerificationCard 
+                        key={verification.id}
                         verification={verification}
-                        onStatusChange={async (status) => 
-                          handleStatusChange(verification.id, status)
-                        }
+                        onStatusChange={handleStatusChange}
                       />
                     </KanbanItem>
                   ))

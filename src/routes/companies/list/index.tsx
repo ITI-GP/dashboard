@@ -3,8 +3,15 @@ import React from "react";
 import { CreateButton, DeleteButton, EditButton, FilterDropdown, List, useTable } from "@refinedev/antd";
 import { getDefaultFilter, type HttpError, useGo } from "@refinedev/core";
 
-import { SearchOutlined, UserOutlined, TeamOutlined, ShopOutlined } from "@ant-design/icons";
-import { Input, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { SearchOutlined, UserOutlined, TeamOutlined, ShopOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
+import { Input, Space, Table, Tag, Tooltip, Typography, Switch, message } from "antd";
+import { useState } from "react";
+import { supabase } from "@/providers/supabaseClient";
+
+// Type for verification status update
+interface VerificationUpdate {
+  is_verified: boolean;
+}
 
 import { CustomAvatar, PaginationTotal, Text } from "@/components";
 
@@ -20,8 +27,111 @@ interface Company {
   created_at: string;
 }
 
+const VerificationToggle: React.FC<{
+  isVerified: boolean;
+  companyId: string;
+  onVerificationChange: (companyId: string, newStatus: boolean) => Promise<boolean>;
+}> = ({ isVerified, companyId, onVerificationChange }) => {
+  const [loading, setLoading] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(isVerified);
+
+  const handleChange = async (checked: boolean) => {
+    setLoading(true);
+    try {
+      const success = await onVerificationChange(companyId, checked);
+      if (success) {
+        setCurrentStatus(checked);
+      }
+    } catch (error) {
+      console.error('Error updating verification status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Space>
+      <Switch
+        checkedChildren={<CheckOutlined />}
+        unCheckedChildren={<CloseOutlined />}
+        checked={currentStatus}
+        onChange={handleChange}
+        loading={loading}
+        disabled={loading}
+      />
+      <Tag color={currentStatus ? 'green' : 'red'}>
+        {currentStatus ? 'Verified' : 'Not Verified'}
+      </Tag>
+    </Space>
+  );
+};
+
 export const CompanyListPage = ({ children }: React.PropsWithChildren) => {
   const go = useGo();
+
+  const [updatingCompanies, setUpdatingCompanies] = useState<Record<string, boolean>>({});
+
+  const handleVerificationChange = async (companyId: string, newStatus: boolean): Promise<boolean> => {
+    const loadingKey = `verify-${companyId}`;
+    setUpdatingCompanies(prev => ({ ...prev, [loadingKey]: true }));
+    
+    try {
+      console.log('Fetching company data for ID:', companyId);
+      // 1. First, get the current company data
+      const { data: companyData, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', companyId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching company data:', fetchError);
+        throw new Error(`Failed to fetch company data: ${fetchError.message}`);
+      }
+
+      console.log('Updating verification status to:', newStatus);
+      
+      // Only update the verification record if it exists
+      if (companyData.verification_id) {
+        console.log('Updating verification record:', companyData.verification_id);
+        const { error: verificationError } = await supabase
+          .from('verification')
+          .update({ 
+            status: newStatus ? 'APPROVED' : 'REJECTED',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', companyData.verification_id);
+
+        if (verificationError) {
+          console.error('Verification update error:', verificationError);
+          throw verificationError;
+        }
+      }
+      
+      message.success(`Company ${newStatus ? 'verified' : 'unverified'} successfully`);
+      return true;
+    } catch (error) {
+      console.error('Error in verification update:', {
+        error,
+        companyId,
+        newStatus,
+        timestamp: new Date().toISOString()
+      });
+      
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'An unknown error occurred';
+      
+      message.error(`Verification update failed: ${errorMessage}`);
+      return false;
+    } finally {
+      setUpdatingCompanies(prev => {
+        const newState = { ...prev };
+        delete newState[loadingKey];
+        return newState;
+      });
+    }
+  };
 
   const { tableProps, filters } = useTable<Company, HttpError, Company>({
     resource: "users",
@@ -140,7 +250,7 @@ export const CompanyListPage = ({ children }: React.PropsWithChildren) => {
           <Table.Column<Company>
             title="Type"
             dataIndex="role"
-            render={(role) => (
+            render={(role: string) => (
               <Tag color={role === 'admin' ? 'red' : 'blue'}>
                 {role?.toUpperCase() || 'COMPANY'}
               </Tag>
@@ -161,6 +271,17 @@ export const CompanyListPage = ({ children }: React.PropsWithChildren) => {
                   </Tooltip>
                 )}
               </Space>
+            )}
+          />
+          <Table.Column<Company>
+            title="Verification Status"
+            dataIndex="isVerified"
+            render={(isVerified: boolean, record: Company) => (
+              <VerificationToggle 
+                isVerified={isVerified} 
+                companyId={record.id} 
+                onVerificationChange={handleVerificationChange}
+              />
             )}
           />
           <Table.Column<Company>

@@ -27,6 +27,7 @@ import {
   TasksCreatePage,
   TasksEditPage,
   TasksListPage,
+  UsersListPage,
 } from "@/routes";
 import CreateAdmin from "./pages/CreateAdmin";
 
@@ -84,6 +85,13 @@ const App = () => {
                   <Route index element={<CompanyListPage />} />
                   <Route path="new" element={<CompanyCreatePage />} />
                   <Route path="edit/:id" element={<CompanyEditPage />} />
+                </Route>
+
+                <Route path="/users">
+                  <Route index element={<UsersListPage />} />
+                  {/* Add create and edit routes when needed */}
+                  {/* <Route path="new" element={<UserCreatePage />} /> */}
+                  {/* <Route path="edit/:id" element={<UserEditPage />} /> */}
                 </Route>
 
                 <Route path="*" element={<ErrorComponent />} />
