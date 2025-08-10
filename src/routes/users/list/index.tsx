@@ -4,22 +4,20 @@ import {
   CreateButton, 
   DeleteButton, 
   EditButton, 
-  FilterDropdown, 
   List, 
-  useTable 
 } from "@refinedev/antd";
-import { getDefaultFilter } from "@refinedev/core";
 import { 
-  SearchOutlined, 
   UserOutlined, 
   TeamOutlined, 
   CheckOutlined, 
   CloseOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ShopOutlined
+  ShopOutlined,
+  EditOutlined
 } from "@ant-design/icons";
 import { 
+  Button,
   Input, 
   Space, 
   Table, 
@@ -200,11 +198,11 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
               loading={updatingUsers[`verify-${id}`]}
               disabled={updatingUsers[`verify-${id}`]}
             />
-            <EditButton
-              hideText
+            <Button
+              icon={<EditOutlined />}
               size="small"
-              recordItemId={id}
-              onClick={() => go({ to: `/users/edit/${id}` })}
+              onClick={() => go({ to: `/users/edit/${id}`, type: 'push' })}
+              style={{ border: 'none' }}
             />
             <DeleteButton
               hideText

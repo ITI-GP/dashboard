@@ -28,6 +28,7 @@ import {
   TasksEditPage,
   TasksListPage,
   UsersListPage,
+  UserEditPage,
 } from "@/routes";
 import CreateAdmin from "./pages/CreateAdmin";
 
@@ -89,9 +90,7 @@ const App = () => {
 
                 <Route path="/users">
                   <Route index element={<UsersListPage />} />
-                  {/* Add create and edit routes when needed */}
-                  {/* <Route path="new" element={<UserCreatePage />} /> */}
-                  {/* <Route path="edit/:id" element={<UserEditPage />} /> */}
+                  <Route path="edit/:id" element={<UserEditPage />} />
                 </Route>
 
                 <Route path="*" element={<ErrorComponent />} />
