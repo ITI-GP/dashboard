@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useGo } from "@refinedev/core";
 import { 
   CreateButton, 
@@ -19,6 +19,7 @@ import {
 import { 
   Button,
   Input, 
+  Select,
   Space, 
   Table, 
   Tag, 
@@ -70,23 +71,56 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
     pageSize: 10,
     total: 0,
   });
+  const [searchText, setSearchText] = useState('');
+  const [filters, setFilters] = useState<{
+    role?: string;
+    isVerified?: boolean;
+    isCompany?: boolean;
+    isOwner?: boolean;
+    isRenter?: boolean;
+  }>({});
+  const [debouncedSearchText, setDebouncedSearchText] = useState('');
 
-  // Fetch users from Supabase
+  // Debounce search text
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+      // Reset to first page when search text changes
+      setPagination(prev => ({ ...prev, current: 1 }));
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  // Fetch users from Supabase with filters and search
   const fetchUsers = async (currentPage: number, pageSize: number) => {
     setLoading(true);
     try {
       const from = (currentPage - 1) * pageSize;
       const to = from + pageSize - 1;
       
-      // First get the total count
-      const { count } = await supabase
+      // Build the query
+      let query = supabase
         .from('users')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact' });
+
+      // Apply search
+      if (debouncedSearchText) {
+        query = query.or(`name.ilike.%${debouncedSearchText}%,email.ilike.%${debouncedSearchText}%`);
+      }
+
+      // Apply filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined) {
+          query = query.eq(key, value);
+        }
+      });
       
-      // Then get the paginated data
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
+      // Get count with filters applied
+      const { count } = await query;
+      
+      // Add ordering and pagination
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .range(from, to);
       
@@ -108,24 +142,43 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
   };
 
   // Handle table change (pagination, filters, sorter)
-  const handleTableChange = (pagination: any) => {
+  const handleTableChange = (pagination: any, filters: any, sorter: any) => {
     fetchUsers(pagination.current, pagination.pageSize);
   };
 
-  // Initial data fetch
-  React.useEffect(() => {
-    fetchUsers(1, pagination.pageSize);
-  }, []);
+  // Handle filter changes
+  const handleFilterChange = (key: string, value: any) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
 
-  // Handle verification status change
+  // Clear all filters
+  const clearAllFilters = () => {
+    setFilters({});
+    setSearchText('');
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
+
+  // Fetch data when filters, search, or pagination changes
+  useEffect(() => {
+    fetchUsers(pagination.current, pagination.pageSize);
+  }, [debouncedSearchText, filters, pagination.pageSize]);
+
+  // Handle verification - can only verify (set to true), not unverify
   const handleVerificationChange = async (userId: string, newStatus: boolean): Promise<boolean> => {
+    // If trying to unverify, don't do anything
+    if (!newStatus) return false;
+    
     const loadingKey = `verify-${userId}`;
     setUpdatingUsers(prev => ({ ...prev, [loadingKey]: true }));
     
     try {
       const { error } = await supabase
         .from('users')
-        .update({ isVerified: newStatus })
+        .update({ isVerified: true })
         .eq('id', userId);
 
       if (error) throw error;
@@ -133,9 +186,11 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
       // Update local state to reflect the change
       setUsers(prevUsers =>
         prevUsers.map(user =>
-          user.id === userId ? { ...user, isVerified: newStatus } : user
+          user.id === userId ? { ...user, isVerified: true } : user
         )
       );
+      
+      message.success('User verified successfully');
       
       message.success(`User ${newStatus ? 'verified' : 'unverified'} successfully`);
       return true;
@@ -232,6 +287,50 @@ export const UsersListPage = ({ children }: React.PropsWithChildren) => {
         </CreateButton>
       )}
     >
+      <div style={{ marginBottom: 16 }}>
+        <Space size="middle" style={{ marginBottom: 16 }}>
+          <Input.Search
+            placeholder="Search by name or email"
+            allowClear
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: 300 }}
+          />
+          <Select
+            placeholder="Filter by role"
+            allowClear
+            style={{ width: 150 }}
+            value={filters.role}
+            onChange={(value) => handleFilterChange('role', value)}
+          >
+            <Select.Option value="admin">Admin</Select.Option>
+            <Select.Option value="user">User</Select.Option>
+          </Select>
+          <Select
+            placeholder="Verification status"
+            allowClear
+            style={{ width: 180 }}
+            value={filters.isVerified}
+            onChange={(value) => handleFilterChange('isVerified', value)}
+          >
+            <Select.Option value="true">Verified</Select.Option>
+            <Select.Option value="false">Not Verified</Select.Option>
+          </Select>
+          <Select
+            placeholder="User type"
+            allowClear
+            style={{ width: 150 }}
+            value={filters.isCompany}
+            onChange={(value) => handleFilterChange('isCompany', value === 'true')}
+          >
+            <Select.Option value="true">Company</Select.Option>
+            <Select.Option value="false">Individual</Select.Option>
+          </Select>
+          <Button onClick={clearAllFilters}>
+            Clear filters
+          </Button>
+        </Space>
+      </div>
       <Table
         rowKey="id"
         columns={columns}
